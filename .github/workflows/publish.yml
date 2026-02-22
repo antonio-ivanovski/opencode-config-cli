@@ -33,7 +33,3 @@ jobs:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: bun publish --access public --registry https://registry.npmjs.org
 
-      - name: Publish to GitHub Packages
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun publish --access public

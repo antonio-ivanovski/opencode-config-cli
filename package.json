@@ -1,5 +1,5 @@
 {
-	"name": "@antonio-ivanovski/lazy-opencode-config",
+	"name": "lazy-opencode-config",
 	"version": "0.0.0-alpha.1",
 	"license": "MIT",
 	"repository": "https://github.com/antonio-ivanovski/lazy-opencode-config",
@@ -19,7 +19,6 @@
 		"dist"
 	],
 	"publishConfig": {
-		"registry": "https://npm.pkg.github.com",
 		"access": "public"
 	},
 	"dependencies": {
