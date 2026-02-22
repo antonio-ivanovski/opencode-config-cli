@@ -2,20 +2,34 @@ name: Publish Package
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*.*.*'
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        default: 'prerelease'
+        type: choice
+        options:
+          - prerelease
+          - patch
+          - minor
+          - major
+      preid:
+        description: 'Prerelease id (used when bump=prerelease)'
+        required: false
+        default: 'alpha'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -28,8 +42,23 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Bump version and tag
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          if [ "${{ github.event.inputs.bump }}" = "prerelease" ]; then
+            bunx bumpp prerelease --preid ${{ github.event.inputs.preid }} --yes --no-push
+          else
+            bunx bumpp ${{ github.event.inputs.bump }} --yes --no-push
+          fi
+
       - name: Publish to npmjs
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: bun publish --access public --registry https://registry.npmjs.org
 
+      - name: Push commit and tag
+        run: git push origin HEAD --follow-tags
