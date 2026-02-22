@@ -9,8 +9,14 @@ const HELP_SECTIONS = [
 	{
 		title: 'Navigation',
 		binds: [
-			['↑ / k', 'Move up'],
-			['↓ / j', 'Move down'],
+			['↑ / k', 'Move up one row'],
+			['↓ / j', 'Move down one row'],
+			['PgDn / Ctrl+f', 'Scroll down one page'],
+			['PgUp / Ctrl+b', 'Scroll up one page'],
+			['Ctrl+d', 'Scroll down half page'],
+			['Ctrl+u', 'Scroll up half page'],
+			['g', 'Jump to top'],
+			['G', 'Jump to bottom'],
 			['→ / l / Enter', 'Expand branch'],
 			['← / h', 'Collapse branch'],
 			['Enter', 'Edit value (leaf nodes)'],

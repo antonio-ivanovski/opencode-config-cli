@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
+import {useTerminalSize} from '../hooks/useTerminalSize.js';
 
 type Props = {
 	mode: 'browse' | 'edit' | 'search';
@@ -14,6 +15,10 @@ export default function StatusBar({
 	warningCount,
 	showUnset,
 }: Props) {
+	const {columns} = useTerminalSize();
+	// paddingX={1} → 2 chars consumed, separator fills the rest
+	const separatorLine = '━'.repeat(Math.max(0, columns - 2));
+
 	const hints = {
 		browse: (
 			<>
@@ -101,9 +106,7 @@ export default function StatusBar({
 	return (
 		<Box flexDirection="column">
 			<Box paddingX={1}>
-				<Text color="gray">
-					━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-				</Text>
+				<Text color="gray">{separatorLine}</Text>
 			</Box>
 			<Box paddingX={1} justifyContent="space-between">
 				<Box>{hints[mode]}</Box>

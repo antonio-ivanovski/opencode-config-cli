@@ -1,11 +1,14 @@
 import React, {useState, useMemo} from 'react';
-import {Box, Text, useInput, useStdout} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import type {TreeNode as TreeNodeType} from '../types/index.js';
 import type {ValidationError} from '../lib/validation.js';
 import TreeNode from './TreeNode.js';
 import AddEntryDialog from './AddEntryDialog.js';
 import {getErrorsForPath} from '../lib/validation.js';
 import {getDefaultValueForSchema} from '../lib/tree-model.js';
+import {useTerminalSize} from '../hooks/useTerminalSize.js';
+import {useMouse} from '../hooks/useMouse.js';
+import {getRenderer} from '../lib/renderer-registry.js';
 
 type Props = {
 	visibleNodes: TreeNodeType[];
@@ -42,6 +45,11 @@ type AddingEntryState = {
 	type: 'record' | 'array';
 };
 
+function isModelPickerPath(path: string): boolean {
+	if (path === 'model' || path === 'small_model') return true;
+	return /^agent\.(.+)\.model$/.test(path);
+}
+
 export default function TreeView({
 	visibleNodes,
 	cursorIndex,
@@ -69,10 +77,13 @@ export default function TreeView({
 	onUndo,
 	onMoveArrayItem,
 }: Props) {
-	const {stdout} = useStdout();
-	const viewHeight = (stdout?.rows ?? 24) - 6; // Subtract header + status
+	const {rows} = useTerminalSize();
+	const viewHeight = rows - 6; // Subtract header + status
 	const [editingPath, setEditingPath] = useState<string | null>(null);
 	const [addingEntry, setAddingEntry] = useState<AddingEntryState | null>(null);
+	const editingNode = editingPath
+		? visibleNodes.find(n => n.path === editingPath) ?? null
+		: null;
 
 	// Viewport windowing
 	const scrollOffset = useMemo(() => {
@@ -96,6 +107,18 @@ export default function TreeView({
 		// Navigation
 		if (key.upArrow || input === 'k') onMoveCursor(-1);
 		if (key.downArrow || input === 'j') onMoveCursor(1);
+
+		// Page / half-page scroll (keyboard scroll — terminal mouse/click is not
+		// supported by Ink 4.x and requires raw ANSI mouse protocol outside of Ink)
+		const halfPage = Math.max(1, Math.floor(viewHeight / 2));
+		if (key.pageDown || (key.ctrl && input === 'f')) onMoveCursor(viewHeight);
+		if (key.pageUp || (key.ctrl && input === 'b')) onMoveCursor(-viewHeight);
+		if (key.ctrl && input === 'd') onMoveCursor(halfPage);
+		if (key.ctrl && input === 'u') onMoveCursor(-halfPage);
+
+		// Jump to top / bottom
+		if (input === 'g') _onSetCursor(0);
+		if (input === 'G') _onSetCursor(visibleNodes.length - 1);
 
 		// Expand/collapse
 		if (
@@ -232,6 +255,27 @@ export default function TreeView({
 		if (input === 'q') onQuit();
 	});
 
+	useMouse(
+		event => {
+			if (addingEntry) return;
+			if (mode === 'edit') return;
+			if (event.kind === 'scroll') {
+				const delta = event.direction === 'down' ? 3 : -3;
+				onMoveCursor(delta);
+				return;
+			}
+			if (event.kind !== 'down') return;
+			const topY = 4;
+			const bottomY = topY + viewHeight - 1;
+			if (event.y < topY || event.y > bottomY) return;
+			const row = event.y - topY;
+			const index = scrollOffset + row;
+			if (index < 0 || index >= visibleNodes.length) return;
+			_onSetCursor(index);
+		},
+		{isActive: !addingEntry && mode === 'browse'},
+	);
+
 	const handleEditComplete = (path: string[], value: unknown) => {
 		onEditValue(path, value);
 		setEditingPath(null);
@@ -278,6 +322,25 @@ export default function TreeView({
 		setAddingEntry(null);
 		onEndEdit();
 	};
+
+	if (editingNode && isModelPickerPath(editingNode.path) && mode === 'edit') {
+		const Renderer = getRenderer(editingNode.path, editingNode.schema);
+		if (Renderer) {
+			return (
+				<Box flexDirection="column" width="100%" height={viewHeight}>
+					<Renderer
+						node={editingNode}
+						value={editingNode.value}
+						schema={editingNode.schema}
+						onChange={value =>
+							handleEditComplete(editingNode.path.split('.'), value)
+						}
+						onCancel={handleEditCancel}
+					/>
+				</Box>
+			);
+		}
+	}
 
 	return (
 		<Box flexDirection="column">

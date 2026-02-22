@@ -1,9 +1,10 @@
 import React, {useState} from 'react';
-import {Box, Text, useStdout, useInput, useApp} from 'ink';
+import {Box, Text, useInput, useApp} from 'ink';
 import {ConfigProvider, useConfig} from './hooks/useConfig.js';
 import {useTreeState} from './hooks/useTreeState.js';
 import {useUndo} from './hooks/useUndo.js';
 import {useSearchableNodes} from './hooks/useSearch.js';
+import {useTerminalSize} from './hooks/useTerminalSize.js';
 import HeaderBar from './components/HeaderBar.js';
 import StatusBar from './components/StatusBar.js';
 import ConfirmDialog from './components/ConfirmDialog.js';
@@ -21,7 +22,7 @@ type Props = {
 };
 
 function AppContent() {
-	const {stdout} = useStdout();
+	const {columns, rows} = useTerminalSize();
 	const config = useConfig();
 	const {
 		loading,
@@ -41,8 +42,6 @@ function AppContent() {
 	const [showQuitConfirm, setShowQuitConfirm] = useState(false);
 	const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 	const [showHelp, setShowHelp] = useState(false);
-	const columns = stdout?.columns ?? 80;
-	const rows = stdout?.rows ?? 24;
 
 	const searchableNodes = useSearchableNodes(tree);
 

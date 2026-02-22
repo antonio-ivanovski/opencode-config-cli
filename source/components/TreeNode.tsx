@@ -17,7 +17,7 @@ type Props = {
 
 function formatRawValue(val: unknown): string {
 	if (typeof val === 'string')
-		return val.length > 30 ? val.slice(0, 27) + '..' : val;
+		return val.length > 40 ? val.slice(0, 37) + '..' : val;
 	if (typeof val === 'boolean') return String(val);
 	if (typeof val === 'number') return String(val);
 	if (val === null) return 'null';
@@ -76,7 +76,7 @@ function getChangeTag(node: TreeNodeType): {
 
 function isModelPickerPath(path: string): boolean {
 	if (path === 'model' || path === 'small_model') return true;
-	return /^agent\.[^.]+\.model$/.test(path);
+	return /^agent\.(.+)\.model$/.test(path);
 }
 
 /** A branch is "not set" when neither it nor any descendant is locally set */

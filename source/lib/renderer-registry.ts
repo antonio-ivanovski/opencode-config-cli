@@ -15,7 +15,18 @@ export function matchPattern(pattern: string, filePath: string): boolean {
 	const patternParts = pattern.split('.');
 	const pathParts = filePath.split('.');
 
-	if (patternParts.length !== pathParts.length) return false;
+	if (patternParts.length !== pathParts.length) {
+		const hasSingleStar = patternParts.includes('*');
+		const starIndex = patternParts.indexOf('*');
+		if (!hasSingleStar || starIndex !== 1) return false;
+		const tail = patternParts.slice(2);
+		if (pathParts.length < 3) return false;
+		for (let i = 0; i < tail.length; i++) {
+			if (tail[i] !== pathParts[pathParts.length - tail.length + i])
+				return false;
+		}
+		return pathParts[0] === patternParts[0];
+	}
 
 	for (let i = 0; i < patternParts.length; i++) {
 		if (patternParts[i] === '*') continue;
