@@ -2,7 +2,7 @@
 
 A CLI + interactive TUI for managing your [opencode](https://opencode.ai) configuration.
 
-<!-- screenshot here -->
+![screenshtot of lazy-opencode-config](./screenshot.webp)
 
 ## What it does
 
