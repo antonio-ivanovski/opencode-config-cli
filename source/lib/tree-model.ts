@@ -29,9 +29,11 @@ function buildNode(
 	configData: Record<string, unknown>,
 	depth: number,
 	inheritedData?: Record<string, unknown>,
+	baseData?: Record<string, unknown>,
 ): TreeNode {
 	const value = key in configData ? configData[key] : undefined;
 	const isSet = key in configData;
+	const baseValue = baseData ? getNestedValue(baseData, key) : undefined;
 
 	// For mixed nodes, check if the actual value is an object — if so, treat as non-leaf
 	const valueIsObject =
@@ -55,11 +57,7 @@ function buildNode(
 	const inheritedValue =
 		!isSet && rawInherited !== undefined ? rawInherited : undefined;
 	const inheritedFrom: TreeNode['inheritedFrom'] =
-		!isSet && rawInherited !== undefined
-			? 'global'
-			: !isSet && schema.default !== undefined
-			? 'default'
-			: undefined;
+		!isSet && rawInherited !== undefined ? 'global' : undefined;
 
 	// effectiveValue: local > inherited global > schema default
 	const effectiveValue = isSet
@@ -70,17 +68,26 @@ function buildNode(
 		? schema.default
 		: undefined;
 
+	let change: TreeNode['change'];
+	if (isSet && baseValue === undefined) change = 'added';
+	else if (!isSet && baseValue !== undefined) change = 'deleted';
+	else if (isSet && baseValue !== undefined && value !== baseValue)
+		change = 'edited';
+
 	const node: TreeNode = {
 		id: path,
 		path,
 		key,
 		schema,
 		value,
+		baseValue,
 		defaultValue: schema.default,
 		children: [],
 		isLeaf,
 		isSet,
 		depth,
+		change,
+		hasChanges: Boolean(change),
 		deprecated: schema.deprecated,
 		deprecatedMessage: schema.deprecatedMessage,
 		inheritedValue,
@@ -92,6 +99,11 @@ function buildNode(
 		const childData =
 			isSet && value && typeof value === 'object' && !Array.isArray(value)
 				? (value as Record<string, unknown>)
+				: {};
+
+		const baseChildData =
+			baseValue && typeof baseValue === 'object' && !Array.isArray(baseValue)
+				? (baseValue as Record<string, unknown>)
 				: {};
 
 		// Child-level inherited data (drill into the object if present)
@@ -107,7 +119,10 @@ function buildNode(
 
 		const schemaKeys = schema.properties ? Object.keys(schema.properties) : [];
 		const dataKeys = Object.keys(childData);
-		const allKeys = sortKeys([...new Set([...schemaKeys, ...dataKeys])]);
+		const baseKeys = Object.keys(baseChildData);
+		const allKeys = sortKeys([
+			...new Set([...schemaKeys, ...dataKeys, ...baseKeys]),
+		]);
 
 		for (const childKey of allKeys) {
 			const childPath = `${path}.${childKey}`;
@@ -125,6 +140,7 @@ function buildNode(
 				childData,
 				depth + 1,
 				childInheritedData,
+				baseChildData,
 			);
 
 			if (!schema.properties?.[childKey]) {
@@ -133,6 +149,9 @@ function buildNode(
 
 			node.children.push(childNode);
 		}
+
+		node.hasChanges =
+			Boolean(node.change) || node.children.some(child => child.hasChanges);
 	} else if (schema.type === 'array') {
 		const items = Array.isArray(value) ? value : [];
 		const itemSchema = schema.items ?? {type: 'string' as const};
@@ -145,11 +164,14 @@ function buildNode(
 				key: String(i),
 				schema: itemSchema,
 				value: items[i],
+				baseValue: undefined,
 				defaultValue: undefined,
 				children: [],
 				isLeaf: true,
 				isSet: true,
 				depth: depth + 1,
+				change: undefined,
+				hasChanges: false,
 				effectiveValue: items[i],
 			};
 			node.children.push(childNode);
@@ -163,6 +185,7 @@ export function buildTree(
 	schema: Record<string, SchemaNode>,
 	configData: Record<string, unknown>,
 	inheritedData?: Record<string, unknown>,
+	baseData?: Record<string, unknown>,
 ): TreeNode[] {
 	const schemaKeys = Object.keys(schema);
 	const dataKeys = Object.keys(configData);
@@ -170,7 +193,15 @@ export function buildTree(
 
 	return allKeys.map(key => {
 		const schemaNode = schema[key] ?? {type: 'string' as const};
-		const node = buildNode(key, key, schemaNode, configData, 0, inheritedData);
+		const node = buildNode(
+			key,
+			key,
+			schemaNode,
+			configData,
+			0,
+			inheritedData,
+			baseData,
+		);
 
 		if (!schema[key]) {
 			node.unknown = true;
@@ -213,7 +244,8 @@ export function flattenTree(
 
 	function walk(nodes: TreeNode[]) {
 		for (const node of nodes) {
-			const shouldInclude = showUnset || hasSetDescendant(node);
+			const shouldInclude =
+				showUnset || hasSetDescendant(node) || node.hasChanges;
 			if (!shouldInclude) continue;
 
 			result.push(node);

@@ -9,6 +9,7 @@ type Props = {
 	isCursor: boolean;
 	isEditing: boolean;
 	isExpanded: boolean;
+	showEdits: boolean;
 	errors: ValidationError[];
 	onEditComplete: (value: unknown) => void;
 	onEditCancel: () => void;
@@ -27,17 +28,18 @@ type DisplayInfo = {
 	text: string;
 	suffix?: string;
 	dim: boolean;
-	useBooleanIcon?: boolean;
+	isBoolean?: boolean;
 	boolValue?: boolean;
+	isNotSet?: boolean;
 };
 
 function getDisplayInfo(node: TreeNodeType): DisplayInfo {
 	if (node.isSet) {
 		if (typeof node.value === 'boolean') {
 			return {
-				text: node.value ? '✓' : '✗',
+				text: String(node.value),
 				dim: false,
-				useBooleanIcon: true,
+				isBoolean: true,
 				boolValue: node.value,
 			};
 		}
@@ -46,10 +48,10 @@ function getDisplayInfo(node: TreeNodeType): DisplayInfo {
 	if (node.inheritedValue !== undefined) {
 		if (typeof node.inheritedValue === 'boolean') {
 			return {
-				text: node.inheritedValue ? '✓' : '✗',
+				text: String(node.inheritedValue),
 				suffix: ' ← global',
 				dim: true,
-				useBooleanIcon: true,
+				isBoolean: true,
 				boolValue: node.inheritedValue,
 			};
 		}
@@ -59,13 +61,28 @@ function getDisplayInfo(node: TreeNodeType): DisplayInfo {
 			dim: true,
 		};
 	}
-	if (node.defaultValue !== undefined) {
-		return {
-			text: `(default: ${String(node.defaultValue)})`,
-			dim: true,
-		};
-	}
-	return {text: '(not set)', dim: true};
+	return {text: '(not set)', dim: true, isNotSet: true};
+}
+
+function getChangeTag(node: TreeNodeType): {
+	label: string;
+	color: string;
+} | null {
+	if (!node.change) return null;
+	if (node.change === 'added') return {label: '[added]', color: '#4CAF50'};
+	if (node.change === 'deleted') return {label: '[deleted]', color: '#F44336'};
+	return {label: '[edited]', color: '#FF9800'};
+}
+
+function isModelPickerPath(path: string): boolean {
+	if (path === 'model' || path === 'small_model') return true;
+	return /^agent\.[^.]+\.model$/.test(path);
+}
+
+/** A branch is "not set" when neither it nor any descendant is locally set */
+function branchIsNotSet(node: TreeNodeType): boolean {
+	if (node.isSet) return false;
+	return node.children.every(c => (c.isLeaf ? !c.isSet : branchIsNotSet(c)));
 }
 
 export default function TreeNode({
@@ -73,6 +90,7 @@ export default function TreeNode({
 	isCursor,
 	isEditing,
 	isExpanded,
+	showEdits,
 	errors,
 	onEditComplete,
 	onEditCancel,
@@ -80,11 +98,29 @@ export default function TreeNode({
 	const indent = '  '.repeat(node.depth);
 	const hasErrors = errors.some(e => e.severity === 'error');
 	const hasWarnings = errors.some(e => e.severity === 'warning');
+	const changeTag = showEdits ? getChangeTag(node) : null;
+	const branchEditedTag =
+		showEdits && !changeTag && node.hasChanges
+			? {label: '[edited]', color: '#FF9800'}
+			: null;
 
 	// If editing, render the appropriate editor
 	if (isEditing) {
 		const Renderer = getRenderer(node.path, node.schema);
 		if (Renderer) {
+			if (isModelPickerPath(node.path)) {
+				return (
+					<Box width="100%" justifyContent="center" marginTop={1}>
+						<Renderer
+							node={node}
+							value={node.value}
+							schema={node.schema}
+							onChange={onEditComplete}
+							onCancel={onEditCancel}
+						/>
+					</Box>
+				);
+			}
 			return (
 				<Box>
 					<Text>{indent}</Text>
@@ -104,8 +140,8 @@ export default function TreeNode({
 	// Branch node (object/array)
 	if (!node.isLeaf) {
 		const arrow = isExpanded ? '▼' : '▶';
-		const childCount = node.children.length;
-		const bracket = `(${childCount})`;
+		const isArray = node.schema.type === 'array';
+		const notSet = branchIsNotSet(node);
 
 		return (
 			<Box>
@@ -116,7 +152,20 @@ export default function TreeNode({
 				<Text bold={isCursor} color={isCursor ? undefined : 'white'}>
 					{node.key}
 				</Text>
-				<Text dimColor> {bracket}</Text>
+				{/* Show count only for arrays that are set */}
+				{isArray && node.isSet && (
+					<Text dimColor> ({node.children.length})</Text>
+				)}
+				{/* Show (not set) for branches with no locally-set descendant */}
+				{notSet && <Text dimColor> (not set)</Text>}
+				{changeTag && (
+					<Text color={changeTag.color}>{` ${changeTag.label}`}</Text>
+				)}
+				{branchEditedTag && (
+					<Text
+						color={branchEditedTag.color}
+					>{` ${branchEditedTag.label}`}</Text>
+				)}
 				{node.deprecated && (
 					<Text color="#FF9800" strikethrough>
 						{' [deprecated]'}
@@ -131,38 +180,35 @@ export default function TreeNode({
 
 	// Leaf node
 	const displayInfo = getDisplayInfo(node);
-	const isUnset = !node.isSet;
+
+	// Color for value text
+	let valueColor: string | undefined;
+	if (hasErrors) {
+		valueColor = '#F44336';
+	} else if (displayInfo.isBoolean) {
+		valueColor = displayInfo.boolValue ? '#4CAF50' : '#F44336';
+	} else if (displayInfo.isNotSet) {
+		valueColor = 'gray';
+	} else if (displayInfo.dim) {
+		valueColor = 'gray';
+	} else {
+		valueColor = '#00BCD4';
+	}
 
 	return (
 		<Box>
 			{isCursor && <Text color="#00BCD4">▌</Text>}
 			{!isCursor && <Text> </Text>}
 			<Text>{indent}</Text>
-			<Text
-				bold={isCursor}
-				dimColor={isUnset}
-				color={isCursor ? undefined : 'white'}
-			>
+			<Text bold={isCursor} color={isCursor ? undefined : 'white'}>
 				{node.key}
 			</Text>
 			<Text dimColor>: </Text>
-			<Text
-				dimColor={isUnset && !displayInfo.useBooleanIcon}
-				color={
-					hasErrors
-						? '#F44336'
-						: displayInfo.useBooleanIcon
-						? displayInfo.boolValue
-							? '#4CAF50'
-							: '#F44336'
-						: displayInfo.dim
-						? 'gray'
-						: '#00BCD4'
-				}
-			>
-				{displayInfo.text}
-			</Text>
+			<Text color={valueColor}>{displayInfo.text}</Text>
 			{displayInfo.suffix && <Text dimColor>{displayInfo.suffix}</Text>}
+			{changeTag && (
+				<Text color={changeTag.color}>{` ${changeTag.label}`}</Text>
+			)}
 			{node.deprecated && (
 				<Text color="#FF9800" dimColor>
 					{' '}

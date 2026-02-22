@@ -12,35 +12,40 @@ const HELP_SECTIONS = [
 			['↑ / k', 'Move up'],
 			['↓ / j', 'Move down'],
 			['→ / l / Enter', 'Expand branch'],
-			['← / h', 'Collapse branch / go to parent'],
-			['Enter', 'Edit value (on leaf nodes)'],
+			['← / h', 'Collapse branch'],
+			['Enter', 'Edit value (leaf nodes)'],
 		],
 	},
 	{
-		title: 'Actions',
+		title: 'Actions (item-specific — see right panel)',
 		binds: [
-			['a', 'Add new key (for dynamic objects/arrays)'],
-			['d', 'Delete / unset value'],
-			['D', 'Delete key from file'],
-			['s / Ctrl+s', 'Save to disk'],
-			['u / Ctrl+z', 'Undo last change'],
+			['a', 'Add entry to selected branch'],
+			['A', 'Add entry to parent branch'],
+			['d', 'Unset value (keeps key in schema)'],
+			['D', 'Delete key from file entirely'],
+			['r', 'Revert to original value'],
+			['K', 'Move array item up'],
+			['J', 'Move array item down'],
 		],
 	},
 	{
 		title: 'View',
 		binds: [
-			['H', 'Toggle visibility of unset values'],
+			['H', 'Toggle show/hide unset values'],
+			['E', 'Toggle show/hide edits'],
 			['/', 'Search / filter tree'],
 			['Tab', 'Switch scope (Global ↔ Project)'],
-			['r', 'Refresh models cache'],
 			['?', 'Show this help overlay'],
 		],
 	},
 	{
-		title: 'General',
+		title: 'Save & Quit',
 		binds: [
+			['s', 'Save (with confirmation prompt)'],
+			['S', 'Save immediately (no prompt)'],
+			['u / Ctrl+z', 'Undo last change'],
 			['q / Ctrl+c', 'Quit (prompts if unsaved)'],
-			['Esc', 'Cancel edit / close overlay / back'],
+			['Esc', 'Cancel edit / close overlay'],
 		],
 	},
 ];
@@ -71,7 +76,7 @@ export default function HelpOverlay({onClose}: Props) {
 					</Text>
 					{section.binds.map(([key, desc]) => (
 						<Box key={key}>
-							<Box width={22}>
+							<Box width={24}>
 								<Text color="#00BCD4">{key}</Text>
 							</Box>
 							<Text dimColor>{desc}</Text>

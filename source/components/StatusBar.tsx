@@ -5,26 +5,24 @@ type Props = {
 	mode: 'browse' | 'edit' | 'search';
 	errorCount: number;
 	warningCount: number;
+	showUnset: boolean;
 };
 
-export default function StatusBar({mode, errorCount, warningCount}: Props) {
+export default function StatusBar({
+	mode,
+	errorCount,
+	warningCount,
+	showUnset,
+}: Props) {
 	const hints = {
 		browse: (
 			<>
-				<Text color="#00BCD4">↑↓</Text>
+				<Text color="#00BCD4">↑↓/jk</Text>
 				<Text dimColor> move </Text>
 				<Text color="gray">│</Text>
 				<Text dimColor> </Text>
 				<Text color="#00BCD4">⏎</Text>
 				<Text dimColor> edit </Text>
-				<Text color="gray">│</Text>
-				<Text dimColor> </Text>
-				<Text color="#00BCD4">a</Text>
-				<Text dimColor> add </Text>
-				<Text color="gray">│</Text>
-				<Text dimColor> </Text>
-				<Text color="#00BCD4">d</Text>
-				<Text dimColor> del </Text>
 				<Text color="gray">│</Text>
 				<Text dimColor> </Text>
 				<Text color="#00BCD4">/</Text>
@@ -35,7 +33,28 @@ export default function StatusBar({mode, errorCount, warningCount}: Props) {
 				<Text dimColor> save </Text>
 				<Text color="gray">│</Text>
 				<Text dimColor> </Text>
+				<Text color="#00BCD4">S</Text>
+				<Text dimColor> save! </Text>
+				<Text color="gray">│</Text>
+				<Text dimColor> </Text>
+				<Text color="#00BCD4">u</Text>
+				<Text dimColor> undo </Text>
+				<Text color="gray">│</Text>
+				<Text dimColor> </Text>
+				<Text color="#00BCD4">H</Text>
+				<Text dimColor> {showUnset ? 'hide unset' : 'show unset'} </Text>
+				<Text color="gray">│</Text>
+				<Text dimColor> </Text>
+				<Text color="#00BCD4">Tab</Text>
+				<Text dimColor> scope </Text>
+				<Text color="gray">│</Text>
+				<Text dimColor> </Text>
 				<Text color="#00BCD4">?</Text>
+				<Text dimColor> help </Text>
+				<Text color="gray">│</Text>
+				<Text dimColor> </Text>
+				<Text color="#00BCD4">q</Text>
+				<Text dimColor> quit</Text>
 			</>
 		),
 		edit: (

@@ -14,20 +14,25 @@ type Props = {
 	focusedNode: TreeNodeType | null;
 	validationErrors: ValidationError[];
 	mode: 'browse' | 'edit' | 'search';
+	showEdits: boolean;
 	onMoveCursor: (delta: number) => void;
 	onSetCursor: (index: number) => void;
 	onToggleExpand: (path: string) => void;
 	onToggleShowUnset: () => void;
+	onToggleShowEdits: () => void;
 	onEditValue: (path: string[], value: unknown) => void;
 	onDeleteValue: (path: string[]) => void;
+	onRevertValue: (path: string[]) => void;
 	onSwitchScope: () => void;
 	onSave: () => void;
+	onSaveImmediate: () => void;
 	onQuit: () => void;
 	onShowHelp: () => void;
 	onStartSearch: () => void;
 	onStartEdit: () => void;
 	onEndEdit: () => void;
 	onUndo: () => void;
+	onMoveArrayItem: (path: string[], direction: 'up' | 'down') => void;
 };
 
 type AddingEntryState = {
@@ -44,20 +49,25 @@ export default function TreeView({
 	focusedNode,
 	validationErrors,
 	mode,
+	showEdits,
 	onMoveCursor,
 	onSetCursor: _onSetCursor,
 	onToggleExpand,
 	onToggleShowUnset,
+	onToggleShowEdits,
 	onEditValue,
 	onDeleteValue,
+	onRevertValue,
 	onSwitchScope,
 	onSave,
+	onSaveImmediate,
 	onQuit,
 	onShowHelp,
 	onStartSearch,
 	onStartEdit,
 	onEndEdit,
 	onUndo,
+	onMoveArrayItem,
 }: Props) {
 	const {stdout} = useStdout();
 	const viewHeight = (stdout?.rows ?? 24) - 6; // Subtract header + status
@@ -112,11 +122,10 @@ export default function TreeView({
 			}
 		}
 
-		// 'a' — add entry to record or array branch
+		// 'a' — add entry to selected record or array branch
 		if (input === 'a' && focusedNode && !focusedNode.isLeaf) {
 			const schema = focusedNode.schema;
 			if (schema.additionalProperties && schema.type === 'object') {
-				// Record-type node
 				setAddingEntry({
 					parentPath: focusedNode.path,
 					parentLabel: focusedNode.key,
@@ -125,7 +134,6 @@ export default function TreeView({
 				});
 				onStartEdit();
 			} else if (schema.type === 'array') {
-				// Array-type node — use simple add flow
 				setAddingEntry({
 					parentPath: focusedNode.path,
 					parentLabel: focusedNode.key,
@@ -136,21 +144,85 @@ export default function TreeView({
 			}
 		}
 
+		// 'A' — add entry to parent branch
+		if (input === 'A' && focusedNode) {
+			// Find the parent node: the node whose path is the prefix of focused path
+			const focusedParts = focusedNode.path.split('.');
+			if (focusedParts.length > 1) {
+				const parentPath = focusedParts.slice(0, -1).join('.');
+				const parentNode = visibleNodes.find(n => n.path === parentPath);
+				if (parentNode && !parentNode.isLeaf) {
+					const schema = parentNode.schema;
+					if (schema.additionalProperties && schema.type === 'object') {
+						setAddingEntry({
+							parentPath: parentNode.path,
+							parentLabel: parentNode.key,
+							existingKeys: parentNode.children.map(c => c.key),
+							type: 'record',
+						});
+						onStartEdit();
+					} else if (schema.type === 'array') {
+						setAddingEntry({
+							parentPath: parentNode.path,
+							parentLabel: parentNode.key,
+							existingKeys: [],
+							type: 'array',
+						});
+						onStartEdit();
+					}
+				}
+			}
+		}
+
+		// K/J — move array item up/down
+		if (input === 'K' && focusedNode) {
+			const parts = focusedNode.path.split('.');
+			const lastPart = parts[parts.length - 1];
+			const idx = parseInt(lastPart ?? '', 10);
+			if (!isNaN(idx) && idx > 0) {
+				const parentPath = parts.slice(0, -1).join('.');
+				onMoveArrayItem(parentPath.split('.'), 'up');
+			}
+		}
+		if (input === 'J' && focusedNode) {
+			const parts = focusedNode.path.split('.');
+			const lastPart = parts[parts.length - 1];
+			const idx = parseInt(lastPart ?? '', 10);
+			if (!isNaN(idx)) {
+				const parentPath = parts.slice(0, -1).join('.');
+				onMoveArrayItem(parentPath.split('.'), 'down');
+			}
+		}
+
 		// Keybind actions
 		if (input === 'H') onToggleShowUnset();
+		if (input === 'E') onToggleShowEdits();
 		if (input === '/') onStartSearch();
-		if (input === 's' || (key.ctrl && input === 's')) onSave();
+		// s = save with confirmation prompt
+		if (input === 's' && !key.ctrl) onSave();
+		// S or Ctrl+s = save immediately
+		if (input === 'S' || (key.ctrl && input === 's')) onSaveImmediate();
 		if (input === '?') onShowHelp();
 		if (input === 'u' || (key.ctrl && input === 'z')) onUndo();
 
-		// Delete (leaf only, must be set)
-		if (input === 'd' && focusedNode && focusedNode.isSet) {
+		// d — unset value (leaf only, must be set)
+		if (
+			input === 'd' &&
+			focusedNode &&
+			focusedNode.isSet &&
+			focusedNode.isLeaf
+		) {
 			onDeleteValue(focusedNode.path.split('.'));
 		}
 
-		// Hard delete — works on any node including branch nodes
-		if (input === 'D' && focusedNode) {
+		// D — hard delete key from file (any set node)
+		if (input === 'D' && focusedNode && focusedNode.isSet) {
 			onDeleteValue(focusedNode.path.split('.'));
+		}
+
+		// Revert to original
+		if (input === 'r' && focusedNode && focusedNode.hasChanges) {
+			onRevertValue(focusedNode.path.split('.'));
 		}
 
 		// Tab — switch scope
@@ -233,6 +305,7 @@ export default function TreeView({
 							isCursor={isCursor}
 							isEditing={isEditing}
 							isExpanded={isExpanded}
+							showEdits={showEdits}
 							errors={nodeErrors}
 							onEditComplete={value =>
 								handleEditComplete(node.path.split('.'), value)

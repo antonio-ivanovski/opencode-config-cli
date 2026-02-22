@@ -43,19 +43,79 @@ export default function DetailsPanel({focusedNode, validationErrors}: Props) {
 		return String(val);
 	};
 
+	// Determine if branch has any locally-set descendant
+	function branchIsNotSet(n: TreeNode): boolean {
+		if (n.isSet) return false;
+		return n.children.every(c => (c.isLeaf ? !c.isSet : branchIsNotSet(c)));
+	}
+
+	const effectivelyNotSet = node.isLeaf ? !node.isSet : branchIsNotSet(node);
+
+	const currentDisplay = node.isLeaf
+		? formatValue(node.value)
+		: effectivelyNotSet
+		? '(not set)'
+		: '(object)';
+
 	const sourceLabel = node.isSet
 		? 'Set locally'
 		: node.inheritedFrom === 'global'
 		? 'Inherited from global'
-		: node.inheritedFrom === 'default'
-		? 'Schema default'
-		: 'Not set';
+		: effectivelyNotSet
+		? 'Not set'
+		: 'Set locally';
 
 	const sourceColor = node.isSet
 		? '#4CAF50'
 		: node.inheritedFrom === 'global'
 		? '#00BCD4'
 		: 'gray';
+
+	const changeLabel = node.change
+		? node.change === 'added'
+			? 'Added'
+			: node.change === 'deleted'
+			? 'Deleted'
+			: 'Edited'
+		: node.hasChanges
+		? 'Edited'
+		: null;
+
+	const changeColor =
+		node.change === 'added'
+			? '#4CAF50'
+			: node.change === 'deleted'
+			? '#F44336'
+			: node.change
+			? '#FF9800'
+			: node.hasChanges
+			? '#FF9800'
+			: 'gray';
+
+	// Commands specific to the selected item (right panel only)
+	const actions: Array<{label: string; description: string}> = [];
+
+	if (node.isLeaf) {
+		actions.push({label: 'Enter', description: 'Edit value'});
+	} else {
+		actions.push({label: 'Enter', description: 'Expand/collapse'});
+		actions.push({label: 'a', description: 'Add entry here'});
+		actions.push({label: 'A', description: 'Add entry to parent'});
+	}
+
+	if (node.schema.type === 'array' && node.children.length > 0) {
+		actions.push({label: 'K', description: 'Move item up'});
+		actions.push({label: 'J', description: 'Move item down'});
+	}
+
+	if (node.isSet) {
+		actions.push({label: 'd', description: 'Unset value (keep key)'});
+		actions.push({label: 'D', description: 'Delete key from file'});
+	}
+
+	if (node.hasChanges) {
+		actions.push({label: 'r', description: 'Revert to original'});
+	}
 
 	return (
 		<Box
@@ -93,8 +153,8 @@ export default function DetailsPanel({focusedNode, validationErrors}: Props) {
 					<Box width={12}>
 						<Text dimColor>Current</Text>
 					</Box>
-					<Text bold color={node.isSet ? '#00BCD4' : 'gray'}>
-						{formatValue(node.value)}
+					<Text bold color={effectivelyNotSet ? 'gray' : '#00BCD4'}>
+						{currentDisplay}
 					</Text>
 				</Box>
 				{node.defaultValue !== undefined && (
@@ -111,6 +171,14 @@ export default function DetailsPanel({focusedNode, validationErrors}: Props) {
 					</Box>
 					<Text color={sourceColor}>{sourceLabel}</Text>
 				</Box>
+				{changeLabel && (
+					<Box>
+						<Box width={12}>
+							<Text dimColor>Change</Text>
+						</Box>
+						<Text color={changeColor}>{changeLabel}</Text>
+					</Box>
+				)}
 				{node.effectiveValue !== undefined &&
 					node.effectiveValue !== node.value && (
 						<Box>
@@ -121,6 +189,22 @@ export default function DetailsPanel({focusedNode, validationErrors}: Props) {
 						</Box>
 					)}
 			</Box>
+
+			{/* Field-specific commands */}
+			{actions.length > 0 && (
+				<>
+					<Text> </Text>
+					<Text dimColor>{`── Commands for ${node.key} ──`}</Text>
+					{actions.map(action => (
+						<Box key={action.label}>
+							<Box width={10}>
+								<Text color="#00BCD4">{action.label}</Text>
+							</Box>
+							<Text dimColor>{action.description}</Text>
+						</Box>
+					))}
+				</>
+			)}
 
 			{/* Enum values */}
 			{node.schema.enumValues && node.schema.enumValues.length > 0 && (

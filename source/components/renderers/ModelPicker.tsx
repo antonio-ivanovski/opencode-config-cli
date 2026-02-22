@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 import {Text, Box, useInput} from 'ink';
 import TextInput from 'ink-text-input';
 import {loadModels} from '../../lib/models-cache.js';
@@ -14,6 +14,8 @@ export default function ModelPicker({
 	const [models, setModels] = useState<ModelsData | null>(null);
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [loading, setLoading] = useState(true);
+	const [detectedModels, setDetectedModels] = useState<string[]>([]);
+	const [showAll, setShowAll] = useState(false);
 
 	useEffect(() => {
 		loadModels()
@@ -24,19 +26,64 @@ export default function ModelPicker({
 			.catch(() => {
 				setLoading(false);
 			});
+
+		import('node:child_process')
+			.then(mod => {
+				const execSync = mod.execSync;
+				try {
+					const output = execSync('opencode models', {
+						encoding: 'utf8',
+						stdio: ['ignore', 'pipe', 'ignore'],
+					});
+					const lines = output
+						.split('\n')
+						.map(line => line.trim())
+						.filter(Boolean);
+					setDetectedModels(lines);
+				} catch {
+					setDetectedModels([]);
+				}
+			})
+			.catch(() => {
+				setDetectedModels([]);
+			});
 	}, []);
 
+	const detectedSet = useMemo(() => new Set(detectedModels), [detectedModels]);
+
+	const handleFilterChange = (next: string) => {
+		setFilter(next);
+		setSelectedIndex(0);
+	};
+
+	const filterLower = filter.toLowerCase();
 	const filteredModels =
 		models?.models.filter(m => {
 			const fullId = `${m.providerId}/${m.id}`;
 			return (
-				fullId.toLowerCase().includes(filter.toLowerCase()) ||
-				m.name.toLowerCase().includes(filter.toLowerCase())
+				fullId.toLowerCase().includes(filterLower) ||
+				m.name.toLowerCase().includes(filterLower)
 			);
 		}) ?? [];
 
+	const orderedModels = useMemo(() => {
+		if (detectedSet.size === 0) return filteredModels;
+		const detected: Model[] = [];
+		const others: Model[] = [];
+		for (const m of filteredModels) {
+			const fullId = `${m.providerId}/${m.id}`;
+			if (detectedSet.has(fullId)) detected.push(m);
+			else others.push(m);
+		}
+		return [...detected, ...others];
+	}, [filteredModels, detectedSet]);
+
 	const grouped = new Map<string, Model[]>();
-	for (const m of filteredModels) {
+	for (const m of orderedModels) {
+		const fullId = `${m.providerId}/${m.id}`;
+		if (!showAll && detectedSet.size > 0 && !detectedSet.has(fullId)) {
+			continue;
+		}
 		const group = grouped.get(m.providerId) ?? [];
 		group.push(m);
 		grouped.set(m.providerId, group);
@@ -64,6 +111,12 @@ export default function ModelPicker({
 			return;
 		}
 
+		if (key.tab) {
+			setSelectedIndex(0);
+			setShowAll(prev => !prev);
+			return;
+		}
+
 		if (key.return) {
 			if (selectableIndices.length === 0) {
 				if (filter.trim()) onChange(filter.trim());
@@ -85,10 +138,6 @@ export default function ModelPicker({
 		}
 	});
 
-	useEffect(() => {
-		setSelectedIndex(0);
-	}, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
-
 	if (loading) return <Text dimColor>Loading models...</Text>;
 
 	const formatCost = (m: Model) => {
@@ -106,13 +155,35 @@ export default function ModelPicker({
 	let modelIndex = 0;
 
 	return (
-		<Box flexDirection="column" borderStyle="round" paddingX={1}>
-			<Text bold>Select Model</Text>
-			<Box>
+		<Box
+			flexDirection="column"
+			borderStyle="round"
+			paddingX={2}
+			paddingY={1}
+			borderColor="#00BCD4"
+		>
+			<Text bold color="#00BCD4">
+				Select Model
+			</Text>
+			<Text dimColor>
+				{showAll
+					? 'Showing all models'
+					: detectedSet.size > 0
+					? 'Showing detected models'
+					: 'Showing all models'}
+			</Text>
+			<Box marginTop={1}>
 				<Text>{'Filter: '}</Text>
-				<TextInput value={filter} onChange={setFilter} />
+				<TextInput value={filter} onChange={handleFilterChange} />
 			</Box>
 			<Box flexDirection="column" marginTop={1}>
+				{flatList.length === 0 && (
+					<Text dimColor>
+						{showAll || detectedSet.size === 0
+							? 'No models match'
+							: 'No detected models match'}
+					</Text>
+				)}
 				{flatList.slice(0, 30).map((item, _i) => {
 					if (item.type === 'header') {
 						const providerName =
@@ -152,7 +223,9 @@ export default function ModelPicker({
 			</Box>
 			<Box marginTop={1}>
 				<Text dimColor>
-					{'↑↓ navigate  Enter select  Esc cancel  Type to filter'}
+					{
+						'↑↓ navigate  Enter select  Esc cancel  Tab toggle all  Type to filter'
+					}
 				</Text>
 			</Box>
 		</Box>

@@ -7,6 +7,7 @@ import {useSearchableNodes} from './hooks/useSearch.js';
 import HeaderBar from './components/HeaderBar.js';
 import StatusBar from './components/StatusBar.js';
 import ConfirmDialog from './components/ConfirmDialog.js';
+import SaveConfirmDialog from './components/SaveConfirmDialog.js';
 import TreeView from './components/TreeView.js';
 import DetailsPanel from './components/DetailsPanel.js';
 import SearchOverlay from './components/SearchOverlay.js';
@@ -30,6 +31,7 @@ function AppContent() {
 		save,
 		editValue,
 		deleteValue,
+		getOriginalValue,
 		switchScope,
 	} = config;
 	const treeState = useTreeState(tree);
@@ -37,6 +39,7 @@ function AppContent() {
 	const {exit} = useApp();
 	const [mode, setMode] = useState<'browse' | 'edit' | 'search'>('browse');
 	const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+	const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 	const [showHelp, setShowHelp] = useState(false);
 	const columns = stdout?.columns ?? 80;
 	const rows = stdout?.rows ?? 24;
@@ -52,6 +55,7 @@ function AppContent() {
 
 	useInput((input, key) => {
 		if (showQuitConfirm) return;
+		if (showSaveConfirm) return;
 		if (showHelp) return;
 		if (mode !== 'browse') return;
 		if (input === 'q' || (key.ctrl && input === 'c')) {
@@ -73,6 +77,18 @@ function AppContent() {
 		editValue(path, value);
 	};
 
+	const handleRevertValue = (path: string[]) => {
+		const original = getOriginalValue(path);
+		if (original === undefined) {
+			deleteValue(path);
+			return;
+		}
+
+		const prevNode = getNodeByPath(tree, path.join('.'));
+		undoState.record({path, value: original}, prevNode?.value);
+		editValue(path, original);
+	};
+
 	const handleUndo = () => {
 		const mod = undoState.undo();
 		if (mod) editValue(mod.path, mod.value);
@@ -84,6 +100,39 @@ function AppContent() {
 		} else {
 			exit();
 		}
+	};
+
+	/** s — save with confirmation dialog */
+	const handleSave = () => {
+		setShowSaveConfirm(true);
+	};
+
+	/** S or Ctrl+s — save immediately without prompt */
+	const handleSaveImmediate = () => {
+		void save();
+	};
+
+	const handleMoveArrayItem = (
+		parentPath: string[],
+		direction: 'up' | 'down',
+	) => {
+		const node = getNodeByPath(tree, parentPath.join('.'));
+		if (!node || !Array.isArray(node.value)) return;
+		const arr = [...(node.value as unknown[])];
+		// Focused node is the item — derive its index from cursor
+		const focusedPath = treeState.focusedNode?.path ?? '';
+		const parts = focusedPath.split('.');
+		const idx = parseInt(parts[parts.length - 1] ?? '', 10);
+		if (isNaN(idx)) return;
+
+		if (direction === 'up' && idx > 0) {
+			[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+		} else if (direction === 'down' && idx < arr.length - 1) {
+			[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+		} else {
+			return;
+		}
+		handleEditValue(parentPath, arr);
 	};
 
 	const handleSearchSelect = (path: string) => {
@@ -122,6 +171,21 @@ function AppContent() {
 		);
 	}
 
+	if (showSaveConfirm) {
+		return (
+			<SaveConfirmDialog
+				onConfirm={() => {
+					void save().then(() => {
+						setShowSaveConfirm(false);
+					});
+				}}
+				onCancel={() => {
+					setShowSaveConfirm(false);
+				}}
+			/>
+		);
+	}
+
 	if (showHelp) {
 		return (
 			<Box flexDirection="column" width={columns} height={rows}>
@@ -133,6 +197,7 @@ function AppContent() {
 					mode={mode}
 					errorCount={errorCount}
 					warningCount={warningCount}
+					showUnset={treeState.showUnset}
 				/>
 			</Box>
 		);
@@ -160,16 +225,18 @@ function AppContent() {
 								focusedNode={treeState.focusedNode}
 								validationErrors={validationErrors}
 								mode={mode}
+								showEdits={treeState.showEdits}
 								onMoveCursor={treeState.moveCursor}
 								onSetCursor={treeState.setCursorIndex}
 								onToggleExpand={treeState.toggleExpand}
 								onToggleShowUnset={treeState.toggleShowUnset}
+								onToggleShowEdits={treeState.toggleShowEdits}
 								onEditValue={handleEditValue}
 								onDeleteValue={path => deleteValue(path)}
+								onRevertValue={handleRevertValue}
 								onSwitchScope={handleSwitchScope}
-								onSave={() => {
-									void save();
-								}}
+								onSave={handleSave}
+								onSaveImmediate={handleSaveImmediate}
 								onQuit={handleQuit}
 								onShowHelp={() => setShowHelp(true)}
 								onStartSearch={() => {
@@ -182,6 +249,7 @@ function AppContent() {
 									setMode('browse');
 								}}
 								onUndo={handleUndo}
+								onMoveArrayItem={handleMoveArrayItem}
 							/>
 						</Box>
 						<Box width={1} flexDirection="column">
@@ -200,6 +268,7 @@ function AppContent() {
 				mode={mode}
 				errorCount={errorCount}
 				warningCount={warningCount}
+				showUnset={treeState.showUnset}
 			/>
 		</Box>
 	);

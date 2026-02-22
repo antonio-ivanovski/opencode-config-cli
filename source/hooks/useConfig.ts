@@ -36,6 +36,7 @@ type ConfigContextValue = {
 	isDirty: boolean;
 	editValue: (path: string[], value: unknown) => void;
 	deleteValue: (path: string[]) => void;
+	getOriginalValue: (path: string[]) => unknown;
 	save: () => Promise<void>;
 	schema: Record<string, SchemaNode>;
 	rawSchema: unknown;
@@ -202,8 +203,15 @@ export function ConfigProvider({
 	const tree = useMemo(() => {
 		const inherited =
 			activeScope === 'project' ? globalEffectiveData : undefined;
-		return buildTree(schema, effectiveData, inherited);
-	}, [schema, effectiveData, activeScope, globalEffectiveData]);
+		const baseData = currentState.data;
+		return buildTree(schema, effectiveData, inherited, baseData);
+	}, [
+		schema,
+		effectiveData,
+		activeScope,
+		globalEffectiveData,
+		currentState.data,
+	]);
 
 	// Validation
 	const validationErrors = useMemo(() => {
@@ -248,6 +256,20 @@ export function ConfigProvider({
 		[activeScope],
 	);
 
+	const getOriginalValue = useCallback(
+		(path: string[]) => {
+			let current: unknown = currentState.data;
+			for (const part of path) {
+				if (!current || typeof current !== 'object') return undefined;
+				const obj = current as Record<string, unknown>;
+				if (!(part in obj)) return undefined;
+				current = obj[part];
+			}
+			return current;
+		},
+		[currentState.data],
+	);
+
 	const save = useCallback(async () => {
 		const state = activeScope === 'global' ? globalState : projectState;
 		const setState =
@@ -290,6 +312,7 @@ export function ConfigProvider({
 		isDirty,
 		editValue,
 		deleteValue,
+		getOriginalValue,
 		save,
 		schema,
 		rawSchema,

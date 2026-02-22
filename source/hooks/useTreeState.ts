@@ -5,13 +5,15 @@ import {flattenTree} from '../lib/tree-model.js';
 export function useTreeState(tree: TreeNode[]) {
 	const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 	const [cursorIndex, setCursorIndex] = useState(0);
-	const [showUnset, setShowUnset] = useState(true);
+	const [showUnset, setShowUnset] = useState(false);
+	const [showEdits, setShowEdits] = useState(true);
 
 	// Memoized flat visible list
-	const visibleNodes = useMemo(
-		() => flattenTree(tree, showUnset, expandedPaths),
-		[tree, showUnset, expandedPaths],
-	);
+	const visibleNodes = useMemo(() => {
+		const nodes = flattenTree(tree, showUnset, expandedPaths);
+		if (showEdits) return nodes;
+		return nodes.filter(n => !n.hasChanges);
+	}, [tree, showUnset, expandedPaths, showEdits]);
 
 	// Clamp cursor when visible list shrinks (via effect, not during render)
 	useEffect(() => {
@@ -57,15 +59,21 @@ export function useTreeState(tree: TreeNode[]) {
 		setShowUnset(prev => !prev);
 	}, []);
 
+	const toggleShowEdits = useCallback(() => {
+		setShowEdits(prev => !prev);
+	}, []);
+
 	return {
 		expandedPaths,
 		cursorIndex: clampedCursorIndex,
 		setCursorIndex,
 		showUnset,
+		showEdits,
 		visibleNodes,
 		focusedNode,
 		toggleExpand,
 		moveCursor,
 		toggleShowUnset,
+		toggleShowEdits,
 	};
 }
