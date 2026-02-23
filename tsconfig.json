@@ -1,6 +1,7 @@
 {
 	"extends": "@sindresorhus/tsconfig",
 	"compilerOptions": {
+		"types": ["vitest/globals"],
 		"outDir": "dist"
 	},
 	"include": ["source"]
