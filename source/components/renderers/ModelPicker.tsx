@@ -4,7 +4,7 @@ import {loadModels} from '../../lib/models-cache.js';
 import type {RendererProps} from '../../types/index.js';
 import type {Model, ModelsData} from '../../types/index.js';
 import {useTerminalSize} from '../../hooks/useTerminalSize.js';
-import {useMouse} from '../../hooks/useMouse.js';
+import {buildFlatList, buildVisibleSlice} from '../../lib/model-picker-list.js';
 
 function getPickerTitle(path: string): string {
 	// agent.<name>.model → "Select Model for <name>"
@@ -52,7 +52,7 @@ export default function ModelPicker({
 	);
 	const contentWidth = Math.max(10, pickerWidth - 2 - PADDING_X * 2);
 	// Viewport height: rows minus chrome, clamped to a sensible range
-	const viewHeight = Math.max(3, rows - CHROME_ROWS);
+	const viewHeight = Math.max(5, rows - CHROME_ROWS);
 
 	const [filter, setFilter] = useState('');
 	const [models, setModels] = useState<ModelsData | null>(null);
@@ -113,10 +113,6 @@ export default function ModelPicker({
 		);
 	}, [filter, models]);
 
-	const providerNameMap = useMemo(() => {
-		return new Map(models?.providers.map(p => [p.id, p.name]) ?? []);
-	}, [models]);
-
 	const orderedModels = useMemo(() => {
 		if (detectedSet.size === 0) return filteredModels;
 		const detected: Model[] = [];
@@ -129,36 +125,15 @@ export default function ModelPicker({
 		return [...detected, ...others];
 	}, [filteredModels, detectedSet]);
 
-	const grouped = new Map<string, Model[]>();
-	for (const m of orderedModels) {
-		const fullId = `${m.providerId}/${m.id}`;
-		if (!showAll && detectedSet.size > 0 && !detectedSet.has(fullId)) {
-			continue;
-		}
-		const group = grouped.get(m.providerId) ?? [];
-		group.push(m);
-		grouped.set(m.providerId, group);
-	}
-
-	type FlatItem =
-		| {type: 'header'; provider: string}
-		| {type: 'model'; model: Model};
-
-	const flatList: FlatItem[] = [];
-	for (const [providerId, providerModels] of grouped) {
-		flatList.push({type: 'header', provider: providerId});
-		for (const m of providerModels) {
-			flatList.push({type: 'model', model: m});
-		}
-	}
+	const flatList = useMemo(
+		() => buildFlatList(models, orderedModels, showAll, detectedSet),
+		[models, orderedModels, showAll, detectedSet],
+	);
 
 	// selectableIndices[i] = index in flatList for the i-th selectable model row
 	const selectableIndices = flatList
 		.map((item, i) => (item.type === 'model' ? i : -1))
 		.filter(i => i >= 0);
-
-	// The flatList index of the currently selected model
-	const selectedFlatIndex = selectableIndices[selectedIndex] ?? 0;
 
 	useEffect(() => {
 		if (selectableIndices.length === 0) {
@@ -172,15 +147,23 @@ export default function ModelPicker({
 
 	// Keep 2 rows reserved for scroll indicators to avoid layout jitter
 	const listHeight = Math.max(1, viewHeight - 2);
-
-	// Derive scroll offset so the selected row is always visible (centered when possible)
-	const half = Math.floor(listHeight / 2);
-	let scrollOffset = selectedFlatIndex - half;
-	scrollOffset = Math.max(0, scrollOffset);
-	scrollOffset = Math.min(
-		Math.max(0, flatList.length - listHeight),
+	const [scrollOffset, setScrollOffset] = useState(0);
+	const {
+		visibleSlice,
+		showScrollUp,
+		showScrollDown,
+		scrollOffset: nextOffset,
+	} = buildVisibleSlice(
+		flatList,
+		selectableIndices,
+		selectedIndex,
+		listHeight,
 		scrollOffset,
 	);
+
+	useEffect(() => {
+		if (nextOffset !== scrollOffset) setScrollOffset(nextOffset);
+	}, [nextOffset, scrollOffset]);
 
 	useInput((input, key) => {
 		if (key.escape) {
@@ -284,34 +267,6 @@ export default function ModelPicker({
 		}
 	});
 
-	useMouse(
-		event => {
-			if (event.kind === 'scroll') {
-				const delta = event.direction === 'down' ? 3 : -3;
-				setSelectedIndex(i => {
-					if (selectableIndices.length === 0) return 0;
-					return Math.max(0, Math.min(selectableIndices.length - 1, i + delta));
-				});
-				return;
-			}
-			if (event.kind !== 'down') return;
-			const contentTop = 4;
-			const listStartY = contentTop + 1 + PADDING_Y + 1 + 1 + 1 + 1; // border + padding + title + subtitle + filter + margin
-			const listEndY = listStartY + listHeight + 1;
-			if (event.y < listStartY || event.y > listEndY) return;
-			const row = event.y - listStartY - 1;
-			const flatIndex = scrollOffset + row;
-			const modelIndex = flatIndexToModelIndex.get(flatIndex);
-			if (modelIndex === undefined) return;
-			setSelectedIndex(modelIndex);
-			const item = flatList[selectableIndices[modelIndex]!];
-			if (item?.type === 'model') {
-				onChange(`${item.model.providerId}/${item.model.id}`);
-			}
-		},
-		{isActive: true},
-	);
-
 	if (loading) return <Text dimColor>Loading models...</Text>;
 
 	const formatCost = (m: Model) => {
@@ -331,10 +286,6 @@ export default function ModelPicker({
 	selectableIndices.forEach((flatIdx, modelIdx) => {
 		flatIndexToModelIndex.set(flatIdx, modelIdx);
 	});
-
-	const visibleSlice = flatList.slice(scrollOffset, scrollOffset + listHeight);
-	const showScrollUp = scrollOffset > 0;
-	const showScrollDown = scrollOffset + listHeight < flatList.length;
 
 	return (
 		<Box
@@ -378,12 +329,10 @@ export default function ModelPicker({
 					const flatIdx = scrollOffset + sliceI;
 
 					if (item.type === 'header') {
-						const providerName =
-							providerNameMap.get(item.provider) ?? item.provider;
 						return (
-							<Box key={`h-${item.provider}`}>
+							<Box key={`h-${item.providerId}`}>
 								<Text bold color="blue" wrap="truncate">
-									{fitText(providerName, contentWidth)}
+									{fitText(item.label, contentWidth)}
 								</Text>
 							</Box>
 						);
@@ -391,7 +340,7 @@ export default function ModelPicker({
 
 					const modelIdx = flatIndexToModelIndex.get(flatIdx)!;
 					const isSelected = modelIdx === selectedIndex;
-					const fullId = `${item.model.providerId}/${item.model.id}`;
+					const fullId = item.fullId;
 					const isCurrent = fullId === String(value);
 					const metaParts = [formatContext(item.model), formatCost(item.model)]
 						.filter(Boolean)

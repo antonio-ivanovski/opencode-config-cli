@@ -7,7 +7,6 @@ import AddEntryDialog from './AddEntryDialog.js';
 import {getErrorsForPath} from '../lib/validation.js';
 import {getDefaultValueForSchema} from '../lib/tree-model.js';
 import {useTerminalSize} from '../hooks/useTerminalSize.js';
-import {useMouse} from '../hooks/useMouse.js';
 import {getRenderer} from '../lib/renderer-registry.js';
 
 type Props = {
@@ -254,27 +253,6 @@ export default function TreeView({
 		// Quit
 		if (input === 'q') onQuit();
 	});
-
-	useMouse(
-		event => {
-			if (addingEntry) return;
-			if (mode === 'edit') return;
-			if (event.kind === 'scroll') {
-				const delta = event.direction === 'down' ? 3 : -3;
-				onMoveCursor(delta);
-				return;
-			}
-			if (event.kind !== 'down') return;
-			const topY = 4;
-			const bottomY = topY + viewHeight - 1;
-			if (event.y < topY || event.y > bottomY) return;
-			const row = event.y - topY;
-			const index = scrollOffset + row;
-			if (index < 0 || index >= visibleNodes.length) return;
-			_onSetCursor(index);
-		},
-		{isActive: !addingEntry && mode === 'browse'},
-	);
 
 	const handleEditComplete = (path: string[], value: unknown) => {
 		onEditValue(path, value);
