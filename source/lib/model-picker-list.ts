@@ -4,6 +4,11 @@ export type FlatItem =
 	| {type: 'header'; providerId: string; label: string}
 	| {type: 'model'; model: Model; fullId: string};
 
+export type VisibleRow = {
+	item: FlatItem;
+	flatIndex: number;
+};
+
 export function buildFlatList(
 	models: ModelsData | null,
 	orderedModels: Model[],
@@ -47,14 +52,14 @@ export function buildVisibleSlice(
 	listHeight: number,
 	prevScrollOffset: number,
 ): {
-	visibleSlice: FlatItem[];
+	visibleRows: VisibleRow[];
 	scrollOffset: number;
 	showScrollUp: boolean;
 	showScrollDown: boolean;
 } {
 	if (flatList.length === 0) {
 		return {
-			visibleSlice: [],
+			visibleRows: [],
 			scrollOffset: 0,
 			showScrollUp: false,
 			showScrollDown: false,
@@ -70,48 +75,19 @@ export function buildVisibleSlice(
 	}
 	scrollOffset = Math.min(Math.max(0, scrollOffset), maxOffset);
 
-	let headerIndex = -1;
-	for (let i = selectedFlatIndex; i >= 0; i--) {
-		if (flatList[i]?.type === 'header') {
-			headerIndex = i;
-			break;
-		}
-	}
-	if (headerIndex >= 0) {
-		const distance = selectedFlatIndex - headerIndex;
-		if (headerIndex < scrollOffset && distance < listHeight) {
-			scrollOffset = headerIndex;
+	const headerIndex = selectedFlatIndex - 1;
+	if (headerIndex >= 0 && flatList[headerIndex]?.type === 'header') {
+		if (headerIndex < scrollOffset) {
+			const selectedVisible = selectedFlatIndex < headerIndex + listHeight;
+			if (selectedVisible) scrollOffset = headerIndex;
 		}
 	}
 
-	let adjusted = true;
-	while (adjusted) {
-		adjusted = false;
-		const windowEnd = Math.min(
-			flatList.length - 1,
-			scrollOffset + listHeight - 1,
-		);
-		for (let i = scrollOffset; i <= windowEnd; i++) {
-			const item = flatList[i];
-			if (item?.type !== 'model') continue;
-			const prev = flatList[i - 1];
-			if (prev?.type !== 'header') continue;
-			if (i - 1 < scrollOffset) {
-				const nextOffset = i - 1;
-				const selectedVisible =
-					selectedFlatIndex >= nextOffset &&
-					selectedFlatIndex < nextOffset + listHeight;
-				if (selectedVisible) {
-					scrollOffset = nextOffset;
-					adjusted = true;
-				}
-			}
-		}
-	}
-
-	const visibleSlice = flatList.slice(scrollOffset, scrollOffset + listHeight);
+	const visibleRows: VisibleRow[] = flatList
+		.slice(scrollOffset, scrollOffset + listHeight)
+		.map((item, idx) => ({item, flatIndex: scrollOffset + idx}));
 	return {
-		visibleSlice,
+		visibleRows,
 		scrollOffset,
 		showScrollUp: scrollOffset > 0,
 		showScrollDown: scrollOffset + listHeight < flatList.length,

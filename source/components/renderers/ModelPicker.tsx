@@ -149,7 +149,7 @@ export default function ModelPicker({
 	const listHeight = Math.max(1, viewHeight - 2);
 	const [scrollOffset, setScrollOffset] = useState(0);
 	const {
-		visibleSlice,
+		visibleRows,
 		showScrollUp,
 		showScrollDown,
 		scrollOffset: nextOffset,
@@ -325,12 +325,11 @@ export default function ModelPicker({
 					</Text>
 				)}
 				<Text dimColor>{showScrollUp ? '  ↑ more above' : '  '}</Text>
-				{visibleSlice.map((item, sliceI) => {
-					const flatIdx = scrollOffset + sliceI;
-
+				{visibleRows.map(row => {
+					const {item, flatIndex} = row;
 					if (item.type === 'header') {
 						return (
-							<Box key={`h-${item.providerId}`}>
+							<Box key={`h-${item.providerId}-${flatIndex}`}>
 								<Text bold color="blue" wrap="truncate">
 									{fitText(item.label, contentWidth)}
 								</Text>
@@ -338,7 +337,7 @@ export default function ModelPicker({
 						);
 					}
 
-					const modelIdx = flatIndexToModelIndex.get(flatIdx)!;
+					const modelIdx = flatIndexToModelIndex.get(flatIndex)!;
 					const isSelected = modelIdx === selectedIndex;
 					const fullId = item.fullId;
 					const isCurrent = fullId === String(value);
@@ -349,7 +348,7 @@ export default function ModelPicker({
 					const displayText = fitText(lineText, Math.max(0, contentWidth - 2));
 
 					return (
-						<Box key={fullId}>
+						<Box key={`${fullId}-${flatIndex}`}>
 							{isSelected ? (
 								<Text color="cyan">{'▌ '}</Text>
 							) : isCurrent ? (

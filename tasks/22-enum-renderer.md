@@ -17,7 +17,7 @@ Inline select list for enum fields. Shows all valid values, highlights current, 
 - [ ] Current value highlighted/marked with `●`
 - [ ] ↑/↓ to navigate, Enter to select, Esc to cancel
 - [ ] Calls `onChange` on Enter with selected value
-- [ ] Works for: logLevel, share, tui.diff_style, agent._.mode, permission._, agent.\*.color (theme presets)
+- [ ] Works for: logLevel, share, tui.diff*style, agent.*.mode, permission.\_, agent.\*.color (theme presets)
 - [ ] For `autoupdate` (mixed: boolean | "notify"): show `true`, `false`, `notify`
 - [ ] Registered in typeRenderers as the default for `enum` type
 
